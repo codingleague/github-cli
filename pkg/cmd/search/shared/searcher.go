@@ -19,21 +19,21 @@ type searcher struct {
 	host   string
 }
 
-func NewSearcher(client *http.Client, host string) *searcher {
+func NewSearcher(client *http.Client, host string) search.Searcher {
 	return &searcher{
 		client: client,
 		host:   host,
 	}
 }
 
-func (s *searcher) Search(query search.Query) (search.Result, error) {
-	result := search.Result{}
+func (s *searcher) Repositories(query search.Query) (search.RepositoriesResult, error) {
+	result := search.RepositoriesResult{}
 	path := fmt.Sprintf("https://api.%s/search/%s", s.host, query.Kind)
 	queryString := url.Values{}
 	q := strings.Builder{}
 	quotedKeywords := quoteKeywords(query.Keywords)
 	q.WriteString(strings.Join(quotedKeywords, " "))
-	for k, v := range query.Qualifiers.ListSet() {
+	for k, v := range listSet(query.Qualifiers) {
 		v = quoteQualifier(v)
 		q.WriteString(fmt.Sprintf(" %s:%s", k, v))
 	}
@@ -75,13 +75,13 @@ func (s *searcher) Search(query search.Query) (search.Result, error) {
 		if err != nil {
 			return result, err
 		}
-		pageResult := search.Result{}
+		pageResult := search.RepositoriesResult{}
 		err = json.Unmarshal(b, &pageResult)
 		if err != nil {
 			return result, err
 		}
 		result.IncompleteResults = pageResult.IncompleteResults
-		result.TotalCount = pageResult.TotalCount
+		result.Total = pageResult.Total
 		result.Items = append(result.Items, pageResult.Items...)
 	}
 	return result, nil
@@ -100,7 +100,7 @@ func (s *searcher) URL(query search.Query) string {
 	q := strings.Builder{}
 	quotedKeywords := quoteKeywords(query.Keywords)
 	q.WriteString(strings.Join(quotedKeywords, " "))
-	for k, v := range query.Qualifiers.ListSet() {
+	for k, v := range listSet(query.Qualifiers) {
 		v = quoteQualifier(v)
 		q.WriteString(fmt.Sprintf(" %s:%s", k, v))
 	}
@@ -175,4 +175,14 @@ func handleHTTPError(resp *http.Response) error {
 		return err
 	}
 	return httpError
+}
+
+func listSet(q search.Qualifiers) map[string]string {
+	m := map[string]string{}
+	for _, v := range q {
+		if v.IsSet() {
+			m[v.Key()] = v.String()
+		}
+	}
+	return m
 }
